@@ -1,4 +1,4 @@
-use crate::controllers::control_output::ControlOutputdaffsdsdf
+use crate::controllers::control_output::ControlOutput;
 use crate::controllers::feedback::lqr::{LQRController, LQRParams};
 use crate::controllers::feedback::swing_up_energy::{SwingUpEnergyController, SwingUpEnergyParams};
 use crate::plant::cart_pole::cart_pole_state::{
