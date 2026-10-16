@@ -2,43 +2,34 @@ mod plant;
 mod simulator;
 mod controllers;
 
-use controllers::control_output::ControlOutput;
-use controllers::feedback::lqr::LQRParams;
-use controllers::feedback::swing_up_energy::SwingUpEnergyParams;
-use controllers::feedback::swing_up_energy_switch_lqr::{SwingUpEnergySwitchLQR, SwitchParams};
-use plant::cart_pole::cart_pole_state::{wrap_angle, CartPoleState, SecondOrderCartPole};
-use simulator::integrator::Integrator;
+use controllers::registry::cart_pole_controllers;
+use plant::cart_pole::cart_pole_state::{CartPoleState, SecondOrderCartPole};
+use simulator::closed_loop::simulate;
+use simulator::metrics::MetricsParams;
 
-/// Swings the cart-pole up from hanging at rest and balances it, printing the trajectory.
+/// Runs every controller from each starting state in turn and prints a comparison table.
 fn main() {
     let dt = 0.01;
+    let steps = 1500;
     let model = SecondOrderCartPole::default();
-    let mut controller = SwingUpEnergySwitchLQR::new(
-        SwingUpEnergyParams::default(),
-        LQRParams::design(&model, [1.0, 1.0, 10.0, 1.0], 0.1, dt),
-        SwitchParams::default(),
-        model,
-    );
-    let mut state = CartPoleState { x: 0.0, x_dot: 0.0, theta: std::f64::consts::PI, theta_dot: 0.0 };
+    let scenarios = [
+        ("hanging at rest", CartPoleState { x: 0.0, x_dot: 0.0, theta: std::f64::consts::PI, theta_dot: 0.0 }),
+        ("near upright", CartPoleState { x: 0.5, x_dot: 0.0, theta: 0.2, theta_dot: -0.3 }),
+    ];
 
-    println!("LQR gains: {:?}", controller.lqr.params.k);
-    println!("{:>6} {:>8} {:>8} {:>8} {:>8} {:>8}  mode", "t", "x", "theta", "theta_d", "energy", "force");
-    let mut mode = controller.mode;
-    for step in 0..=1500 {
-        let control = controller.compute_control(&state);
-        if step % 25 == 0 || controller.mode != mode {
-            println!(
-                "{:>6.2} {:>8.3} {:>8.3} {:>8.3} {:>8.3} {:>8.3}  {:?}",
-                step as f64 * dt,
-                state.x,
-                wrap_angle(state.theta),
-                state.theta_dot,
-                model.pole_energy(&state),
-                control.force,
-                controller.mode,
-            );
-            mode = controller.mode;
+    let metrics = MetricsParams::default();
+    println!(
+        "{steps} steps of {dt} s; converged = every error component within {:?} from then on; \
+         steady-state error = mean upright error over the last {} s",
+        metrics.settle_tolerance, metrics.steady_state_seconds,
+    );
+    for (scenario, initial) in scenarios {
+        println!("\n{scenario}: {initial:?}");
+        println!("{:<16} {:>12} {:>16} {:>14}", "controller", "steady err", "converged step", "int u^2 dt");
+        for (name, mut controller) in cart_pole_controllers(model, dt) {
+            let m = simulate(controller.as_mut(), &model, initial, dt, steps, metrics);
+            let converged = m.steps_to_converge.map_or("never".to_string(), |s| s.to_string());
+            println!("{name:<16} {:>12.4} {converged:>16} {:>14.1}", m.steady_state_error, m.input_power);
         }
-        state = Integrator::step(&model, &state, &control, dt);
     }
 }
