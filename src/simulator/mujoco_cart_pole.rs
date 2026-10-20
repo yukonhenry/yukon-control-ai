@@ -1,6 +1,5 @@
-use std::rc::Rc;
-
 use mujoco_rs::prelude::*;
+use mujoco_rs::viewer::MjViewer;
 
 use crate::plant::cart_pole::cart_pole_params::CartPoleParams;
 use crate::plant::cart_pole::cart_pole_state::{CartPoleControl, CartPoleState};
@@ -15,7 +14,8 @@ use crate::simulator::cart_pole_sim::CartPoleSim;
 ///   of mass plus m l^2 from the offset.
 /// - Both friction terms are viscous, so they are joint damping: mu_c on the slide and mu_p on
 ///   the hinge.
-/// - Inertia never comes from geoms and geoms never collide; they are only for viewing.
+/// - Inertia never comes from geoms and geoms never collide; they are only for viewing, and
+///   `statistic` frames the viewer's camera on the cart rather than the whole rail.
 pub fn cart_pole_mjcf(params: &CartPoleParams, timestep: f64) -> String {
     let CartPoleParams {
         mass_cart,
@@ -33,6 +33,7 @@ pub fn cart_pole_mjcf(params: &CartPoleParams, timestep: f64) -> String {
         r#"<mujoco model="cart_pole">
   <compiler inertiafromgeom="false"/>
   <option timestep="{timestep}" integrator="RK4" gravity="0 0 -{gravity}"/>
+  <statistic center="0 0 0.3" extent="2"/>
   <default>
     <geom contype="0" conaffinity="0"/>
   </default>
@@ -60,7 +61,9 @@ pub fn cart_pole_mjcf(params: &CartPoleParams, timestep: f64) -> String {
 /// The cart-pole simulated by MuJoCo, with each control held over however many MuJoCo
 /// timesteps make up the control step.
 pub struct MujocoCartPole {
-    data: MjData<Rc<MjModel>>,
+    data: MjData<Box<MjModel>>,
+    /// MuJoCo's timestep, held here as well as in the model so that the viewer can't change it
+    /// out from under `step`'s whole-number-of-timesteps check.
     timestep: f64,
 }
 
@@ -69,7 +72,29 @@ impl MujocoCartPole {
     pub fn new(params: &CartPoleParams, timestep: f64) -> Self {
         let model = MjModel::from_xml_string(&cart_pole_mjcf(params, timestep))
             .expect("the generated cart-pole MJCF should compile");
-        Self { data: MjData::new(Rc::new(model)), timestep }
+        Self { data: MjData::new(Box::new(model)), timestep }
+    }
+
+    /// Opens a passive viewer window on this plant's model; `show` draws the plant into it.
+    pub fn launch_viewer(&self) -> Result<MjViewer, MjViewerError> {
+        MjViewer::launch_passive(self.data.model(), 0)
+    }
+
+    /// Draws the current state into `viewer` and processes its window events.
+    ///
+    /// Also merges the physics, visualization and statistics options both ways, so edits made in
+    /// the viewer's panels take effect in this plant (the panels are read-only unless synced at
+    /// least once a second). The timestep is the exception: an edit to it is reverted.
+    pub fn show(&mut self, viewer: &mut MjViewer) -> Result<(), MjViewerError> {
+        viewer.sync_model_opt(self.data.model_opt_mut());
+        viewer.sync_model_vis(self.data.model_vis_mut());
+        viewer.sync_model_stat(self.data.model_stat_mut());
+        if self.data.model_opt_mut().timestep != self.timestep {
+            self.data.model_opt_mut().timestep = self.timestep;
+            viewer.sync_model_opt(self.data.model_opt_mut());
+        }
+        viewer.sync_data(&mut self.data);
+        viewer.render()
     }
 }
 
