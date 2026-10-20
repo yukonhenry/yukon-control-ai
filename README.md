@@ -13,11 +13,11 @@ Initially use Cart-Pole model as the plant to control.
 ## Current Status
 1. Cart-Pole model implemented. [[1]](#ref-green)
 2. Nonlinear feedback control using Energy Shaping and switch to Linear Quadratic Regulator (LQR) implemented.
+3. Mujoco integration, in addition to native integrator.
 
 ## Todo
 1. RL (various, starting with Q-learning) based control.
 2. LLM-based control.
-3. Frontend animation support.
 
 ## References
 1. <a id="ref-green"></a>Colin D. Green, [“Equations of Motion for the Cart and Pole Control Task”](https://sharpneat.sourceforge.io/research/cart-pole/cart-pole-equations.html)
