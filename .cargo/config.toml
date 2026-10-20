@@ -1,0 +1,6 @@
+[env]
+# Where mujoco-rs's `auto-download-mujoco` feature extracts MuJoCo, resolved
+# relative to the project root. Set here so builds that don't source a shell
+# profile (IDE / rust-analyzer, non-interactive shells) still see it. An
+# exported MUJOCO_DOWNLOAD_DIR takes precedence.
+MUJOCO_DOWNLOAD_DIR = { value = ".mujoco", relative = true }
